@@ -31,6 +31,7 @@
 #include "APIAutomationClient.h"
 #include "APIAutomationSessionClient.h"
 #include "APIUIClient.h"
+#include "AutomationDialog.h"
 #include "WebView.h"
 #include <JavaScriptCore/RemoteInspectorServer.h>
 #endif
@@ -48,6 +49,13 @@ public:
     void requestNewPageWithOptions(WebKit::WebAutomationSession&, API::AutomationSessionBrowsingContextOptions, CompletionHandler<void(WebKit::WebPageProxy*)>&&) override;
     void didDisconnectFromRemote(WebKit::WebAutomationSession&) override;
 
+    bool isShowingJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&) override;
+    void dismissCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&) override;
+    void acceptCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&) override;
+    WTF::String messageOfCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&) override;
+    void setUserInputForCurrentJavaScriptPromptOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&, const WTF::String&) override;
+    std::optional<AutomationSessionClient::JavaScriptDialogType> typeOfCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&) override;
+
     void retainWebView(Ref<WebView>&&);
     void releaseWebView(WebPageProxy*);
 
@@ -57,10 +65,20 @@ private:
 
     static void close(WKPageRef, const void*);
 
+    static void runJavaScriptAlert(WKPageRef, WKStringRef, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptAlertResultListenerRef, const void*);
+    void runJavaScriptAlert(WKPageRef, WKStringRef, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptAlertResultListenerRef);
+
+    static void runJavaScriptConfirm(WKPageRef, WKStringRef, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptConfirmResultListenerRef, const void*);
+    void runJavaScriptConfirm(WKPageRef, WKStringRef, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptConfirmResultListenerRef);
+
+    static void runJavaScriptPrompt(WKPageRef, WKStringRef, WKStringRef, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptPromptResultListenerRef, const void*);
+    void runJavaScriptPrompt(WKPageRef, WKStringRef, WKStringRef, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptPromptResultListenerRef);
+
     static void didReceiveAuthenticationChallenge(WKPageRef, WKAuthenticationChallengeRef, const void*);
     void didReceiveAuthenticationChallenge(WKPageRef, WKAuthenticationChallengeRef);
 
     HashSet<Ref<WebView>> m_webViews;
+    std::unique_ptr<AutomationDialog> m_dialog;
 };
 
 class AutomationClient final : public API::AutomationClient, Inspector::RemoteInspector::Client {

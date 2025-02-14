@@ -47,6 +47,7 @@ namespace WebKit {
 AutomationSessionClient::AutomationSessionClient(const String& sessionIdentifier, const Inspector::RemoteInspector::Client::SessionCapabilities& capabilities)
     : m_sessionIdentifier(sessionIdentifier)
     , m_capabilities(capabilities)
+    , m_dialog(WTF::makeUnique<AutomationDialog>())
 {
 }
 
@@ -57,6 +58,36 @@ void AutomationSessionClient::close(WKPageRef pageRef, const void* clientInfo)
 
     auto sessionClient = static_cast<AutomationSessionClient*>(const_cast<void*>(clientInfo));
     sessionClient->releaseWebView(page);
+}
+
+void AutomationSessionClient::runJavaScriptAlert(WKPageRef page, WKStringRef string, WKFrameRef frame, WKSecurityOriginRef origin, WKPageRunJavaScriptAlertResultListenerRef listener, const void* clientInfo)
+{
+    static_cast<AutomationSessionClient*>(const_cast<void*>(clientInfo))->runJavaScriptAlert(page, string, frame, origin, listener);
+}
+
+void AutomationSessionClient::runJavaScriptAlert(WKPageRef, WKStringRef string, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptAlertResultListenerRef listener)
+{
+    m_dialog->runJavaScriptAlert(string, WTFMove(listener));
+}
+
+void AutomationSessionClient::runJavaScriptConfirm(WKPageRef page, WKStringRef string, WKFrameRef frame, WKSecurityOriginRef origin, WKPageRunJavaScriptConfirmResultListenerRef listener, const void* clientInfo)
+{
+    static_cast<AutomationSessionClient*>(const_cast<void*>(clientInfo))->runJavaScriptConfirm(page, string, frame, origin, listener);
+}
+
+void AutomationSessionClient::runJavaScriptConfirm(WKPageRef, WKStringRef string, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptConfirmResultListenerRef listener)
+{
+    m_dialog->runJavaScriptConfirm(string, WTFMove(listener));
+}
+
+void AutomationSessionClient::runJavaScriptPrompt(WKPageRef page, WKStringRef message, WKStringRef defaultValue, WKFrameRef frame, WKSecurityOriginRef origin, WKPageRunJavaScriptPromptResultListenerRef listener, const void* clientInfo)
+{
+    static_cast<AutomationSessionClient*>(const_cast<void*>(clientInfo))->runJavaScriptPrompt(page, message, defaultValue, frame, origin, listener);
+}
+
+void AutomationSessionClient::runJavaScriptPrompt(WKPageRef, WKStringRef message, WKStringRef defaultValue, WKFrameRef, WKSecurityOriginRef, WKPageRunJavaScriptPromptResultListenerRef listener)
+{
+    m_dialog->runJavaScriptPrompt(message, defaultValue, WTFMove(listener));
 }
 
 void AutomationSessionClient::didReceiveAuthenticationChallenge(WKPageRef page, WKAuthenticationChallengeRef authenticationChallenge, const void *clientInfo)
@@ -87,10 +118,13 @@ void AutomationSessionClient::requestNewPageWithOptions(WebKit::WebAutomationSes
     auto newPage = newWindow->page();
     newPage->setControlledByAutomation(true);
 
-    WKPageUIClientV0 uiClient = { };
-    uiClient.base.version = 0;
+    WKPageUIClientV6 uiClient = { };
+    uiClient.base.version = 6;
     uiClient.base.clientInfo = this;
     uiClient.close = close;
+    uiClient.runJavaScriptAlert = runJavaScriptAlert;
+    uiClient.runJavaScriptConfirm = runJavaScriptConfirm;
+    uiClient.runJavaScriptPrompt = runJavaScriptPrompt;
     WKPageSetPageUIClient(toAPI(newPage), &uiClient.base);
 
     WKPageNavigationClientV0 navigationClient = { };
@@ -115,6 +149,36 @@ void AutomationSessionClient::didDisconnectFromRemote(WebKit::WebAutomationSessi
             processPool->setPagesControlledByAutomation(false);
         }
     });
+}
+
+bool AutomationSessionClient::isShowingJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&)
+{
+    return m_dialog->isShowing();
+}
+
+void AutomationSessionClient::dismissCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&)
+{
+    m_dialog->dismiss();
+}
+
+void AutomationSessionClient::acceptCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&)
+{
+    m_dialog->accept();
+}
+
+WTF::String AutomationSessionClient::messageOfCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&)
+{
+    return m_dialog->message();
+}
+
+void AutomationSessionClient::setUserInputForCurrentJavaScriptPromptOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&, const WTF::String& string)
+{
+    m_dialog->setUserInputFotPrompt(string);
+}
+
+std::optional<AutomationSessionClient::JavaScriptDialogType> AutomationSessionClient::typeOfCurrentJavaScriptDialogOnPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&)
+{
+    return m_dialog->type();
 }
 
 void AutomationSessionClient::retainWebView(Ref<WebView>&& webView)

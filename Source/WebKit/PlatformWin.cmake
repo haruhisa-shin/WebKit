@@ -54,6 +54,7 @@ list(APPEND WebKit_SOURCES
     UIProcess/WebsiteData/win/WebsiteDataStoreWin.cpp
 
     UIProcess/win/AutomationClientWin.cpp
+    UIProcess/win/DummyAutomationDialog.cpp
     UIProcess/win/PageClientImpl.cpp
     UIProcess/win/WebContextMenuProxyWin.cpp
     UIProcess/win/WebPageProxyWin.cpp
