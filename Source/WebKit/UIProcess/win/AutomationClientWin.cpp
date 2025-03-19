@@ -50,58 +50,25 @@ AutomationSessionClient::AutomationSessionClient(const String& sessionIdentifier
 {
 }
 
-void AutomationSessionClient::close(WKPageRef pageRef, const void* clientInfo)
-{
-    auto page = WebKit::toImpl(pageRef);
-    page->setControlledByAutomation(false);
-
-    auto sessionClient = static_cast<AutomationSessionClient*>(const_cast<void*>(clientInfo));
-    sessionClient->releaseWebView(page);
-}
-
-void AutomationSessionClient::didReceiveAuthenticationChallenge(WKPageRef page, WKAuthenticationChallengeRef authenticationChallenge, const void *clientInfo)
-{
-    static_cast<AutomationSessionClient*>(const_cast<void*>(clientInfo))->didReceiveAuthenticationChallenge(page, authenticationChallenge);
-}
-
-void AutomationSessionClient::didReceiveAuthenticationChallenge(WKPageRef page, WKAuthenticationChallengeRef authenticationChallenge)
-{
-    auto decisionListener = WKAuthenticationChallengeGetDecisionListener(authenticationChallenge);
-    if (m_capabilities.acceptInsecureCertificates) {
-        auto username = adoptWK(WKStringCreateWithUTF8CString("accept server trust"));
-        auto password = adoptWK(WKStringCreateWithUTF8CString(""));
-        auto credential = adoptWK(WKCredentialCreate(username.get(), password.get(), kWKCredentialPersistenceNone));
-        WKAuthenticationDecisionListenerUseCredential(decisionListener, credential.get());
-    } else
-        WKAuthenticationDecisionListenerRejectProtectionSpaceAndContinue(decisionListener);
-}
-
 void AutomationSessionClient::requestNewPageWithOptions(WebKit::WebAutomationSession& session, API::AutomationSessionBrowsingContextOptions options, CompletionHandler<void(WebKit::WebPageProxy*)>&& completionHandler)
 {
-    auto pageConfiguration = API::PageConfiguration::create();
-    pageConfiguration->setProcessPool(session.protectedProcessPool());
+    RefPtr<WebProcessPool> processPool = session.protectedProcessPool();
+    if (processPool && processPool->processes().size()) {
+        auto& processProxy = processPool->processes()[0];
+        if (processProxy->pageCount()) {
+            Ref firstPage = *processProxy->pages().begin();
 
-    RECT r { };
-    Ref newWindow = WebView::create(r, pageConfiguration, 0);
-
-    auto newPage = newWindow->page();
-    newPage->setControlledByAutomation(true);
-
-    WKPageUIClientV0 uiClient = { };
-    uiClient.base.version = 0;
-    uiClient.base.clientInfo = this;
-    uiClient.close = close;
-    WKPageSetPageUIClient(toAPI(newPage), &uiClient.base);
-
-    WKPageNavigationClientV0 navigationClient = { };
-    navigationClient.base.version = 0;
-    navigationClient.base.clientInfo = this;
-    navigationClient.didReceiveAuthenticationChallenge = didReceiveAuthenticationChallenge;
-    WKPageSetPageNavigationClient(toAPI(newPage), &navigationClient.base);
-
-    retainWebView(WTFMove(newWindow));
-
-    completionHandler(newPage);
+            firstPage->requestNewWindow([completionHandler = WTFMove(completionHandler)](auto&& newPage) mutable {
+                if (newPage) {
+                    newPage->setControlledByAutomation(true);
+                    completionHandler(newPage.get());
+                } else
+                    completionHandler(nullptr);
+            });
+            return;
+        }
+    }
+    completionHandler(nullptr);
 }
 
 void AutomationSessionClient::didDisconnectFromRemote(WebKit::WebAutomationSession& session)
@@ -114,22 +81,6 @@ void AutomationSessionClient::didDisconnectFromRemote(WebKit::WebAutomationSessi
             processPool->setAutomationSession(nullptr);
             processPool->setPagesControlledByAutomation(false);
         }
-    });
-}
-
-void AutomationSessionClient::retainWebView(Ref<WebView>&& webView)
-{
-    m_webViews.add(WTFMove(webView));
-}
-
-void AutomationSessionClient::releaseWebView(WebPageProxy* page)
-{
-    m_webViews.removeIf([&](auto& view) {
-        if (view->page() == page) {
-            view->close();
-            return true;
-        }
-        return false;
     });
 }
 
@@ -172,6 +123,7 @@ void AutomationClient::closeAutomationSession()
 
         processPool->automationSession()->setClient(nullptr);
         processPool->setAutomationSession(nullptr);
+        processPool->setPagesControlledByAutomation(false);
     });
 }
 
