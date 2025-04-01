@@ -730,9 +730,6 @@ public:
 
     bool isControlledByAutomation() const { return m_controlledByAutomation; }
     void setControlledByAutomation(bool);
-#if PLATFORM(WIN)
-    void requestNewWindow(CompletionHandler<void(RefPtr<WebPageProxy>&&)>&&);
-#endif
 
     WebPageInspectorController& inspectorController() { return *m_inspectorController; }
 

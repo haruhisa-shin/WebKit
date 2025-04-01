@@ -37,13 +37,18 @@ namespace WebKit {
 
 #if ENABLE(REMOTE_INSPECTOR)
 
+// FIXME: The AutomationSessionClient and AutomationClient should be split into other files.
 class AutomationSessionClient final : public API::AutomationSessionClient {
 public:
     explicit AutomationSessionClient(const String&, const Inspector::RemoteInspector::Client::SessionCapabilities&);
 
     String sessionIdentifier() const override { return m_sessionIdentifier; }
 
+    // From API::AutomationSessionClient
     void requestNewPageWithOptions(WebKit::WebAutomationSession&, API::AutomationSessionBrowsingContextOptions, CompletionHandler<void(WebKit::WebPageProxy*)>&&) override;
+    void requestMaximizeWindowOfPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&, CompletionHandler<void()>&&) override;
+    void requestHideWindowOfPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&, CompletionHandler<void()>&&) override;
+    void requestRestoreWindowOfPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy&, CompletionHandler<void()>&&) override;
     void didDisconnectFromRemote(WebKit::WebAutomationSession&) override;
 
 private:

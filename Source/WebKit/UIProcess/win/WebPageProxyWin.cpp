@@ -27,11 +27,6 @@
 #include "config.h"
 #include "WebPageProxy.h"
 
-#include "APINavigationAction.h"
-#include "APIPageConfiguration.h"
-#include "APIUIClient.h"
-#include "APIWindowFeatures.h"
-#include "BrowsingContextGroup.h"
 #include "NativeWebKeyboardEvent.h"
 #include "PageClientImpl.h"
 #include "WebPageProxyInternals.h"
@@ -88,28 +83,6 @@ void WebPageProxy::dispatchPendingCharEvents(const NativeWebKeyboardEvent& keydo
     auto& pendingCharEvents = keydownEvent.pendingCharEvents();
     for (auto it = pendingCharEvents.rbegin(); it != pendingCharEvents.rend(); it++)
         internals().keyEventQueue.prepend(NativeWebKeyboardEvent(it->hwnd, it->message, it->wParam, it->lParam, { }));
-}
-
-void WebPageProxy::requestNewWindow(CompletionHandler<void(RefPtr<WebPageProxy>&&)>&& completionHandler)
-{
-    Ref configuration = this->configuration().copy();
-
-    WebCore::WindowFeatures windowFeatures;
-    // FIXME: Attributes of this window should be set to windowFeatures.
-    //        That way, the application can use them in WKPageUIClient.createNewPage().
-    configuration->setWindowFeatures(WTFMove(windowFeatures));
-    configuration->setRelatedPage(*this);
-    configuration->setBrowsingContextGroup(m_browsingContextGroup.copyRef());
-    configuration->setControlledByAutomation(true);
-
-    WebKit::NavigationActionData navigationActionData;
-    WebCore::ResourceRequest request;
-    auto userInitiatedActivity = API::UserInitiatedAction::create();
-    Ref navigationAction = API::NavigationAction::create(WTFMove(navigationActionData), nullptr, nullptr, String(), WTFMove(request), URL(), false , WTFMove(userInitiatedActivity));
-
-    m_uiClient->createNewPage(*this, WTFMove(configuration), WTFMove(navigationAction), [completionHandler = WTFMove(completionHandler)](auto&& page) mutable {
-        completionHandler(WTFMove(page));
-    });
 }
 
 } // namespace WebKit
