@@ -27,19 +27,8 @@
 #include "AutomationClientWin.h"
 
 #if ENABLE(REMOTE_INSPECTOR)
-#include "APINavigationAction.h"
-#include "APIPageConfiguration.h"
-#include "APIUIClient.h"
-#include "APIWindowFeatures.h"
-#include "BrowsingContextGroup.h"
-#include "WKAPICast.h"
+#include "AutomationSessionClientWin.h"
 #include "WebAutomationSession.h"
-#include "WebPageProxy.h"
-#include <WebKit/WKAuthenticationChallenge.h>
-#include <WebKit/WKAuthenticationDecisionListener.h>
-#include <WebKit/WKCredential.h>
-#include <WebKit/WKRetainPtr.h>
-#include <WebKit/WKString.h>
 #include <wtf/RunLoop.h>
 #endif
 
@@ -47,87 +36,6 @@ namespace WebKit {
 
 #if ENABLE(REMOTE_INSPECTOR)
 
-// AutomationSessionClient
-AutomationSessionClient::AutomationSessionClient(const String& sessionIdentifier, const Inspector::RemoteInspector::Client::SessionCapabilities& capabilities)
-    : m_sessionIdentifier(sessionIdentifier)
-    , m_capabilities(capabilities)
-{
-}
-
-void AutomationSessionClient::requestNewPageWithOptions(WebKit::WebAutomationSession& session, API::AutomationSessionBrowsingContextOptions options, CompletionHandler<void(WebKit::WebPageProxy*)>&& completionHandler)
-{
-    RefPtr<WebProcessPool> processPool = session.protectedProcessPool();
-    if (processPool && processPool->processes().size()) {
-        auto& processProxy = processPool->processes()[0];
-        if (processProxy->pageCount()) {
-            Ref firstPage = *processProxy->pages().begin();
-            Ref configuration = firstPage->configuration().copy();
-            Ref browsingContextGroup = firstPage->protectedBrowsingContextGroup();
-
-            WebCore::WindowFeatures windowFeatures;
-            // FIXME: Attributes of the window of firstPage should be set to windowFeatures.
-            //        That way, the application can use them in WKPageUIClient.createNewPage().
-            //        https://webkit.org/b/289887
-            configuration->setWindowFeatures(WTFMove(windowFeatures));
-            configuration->setRelatedPage(firstPage);
-            configuration->setBrowsingContextGroup(WTFMove(browsingContextGroup));
-            configuration->setControlledByAutomation(true);
-
-            WebKit::NavigationActionData navigationActionData;
-            WebCore::ResourceRequest request;
-            auto userInitiatedActivity = API::UserInitiatedAction::create();
-            Ref navigationAction = API::NavigationAction::create(WTFMove(navigationActionData), nullptr, nullptr, String(), WTFMove(request), URL(), false, WTFMove(userInitiatedActivity));
-
-            firstPage->uiClient().createNewPage(firstPage, WTFMove(configuration), WTFMove(navigationAction), [completionHandler = WTFMove(completionHandler)](auto&& newPage) mutable {
-                if (newPage) {
-                    newPage->setControlledByAutomation(true);
-                    completionHandler(newPage.get());
-                } else
-                    completionHandler(nullptr);
-            });
-            return;
-        }
-    }
-    completionHandler(nullptr);
-}
-
-static HWND GetRootWindowHandle(WebKit::WebPageProxy& page)
-{
-    return ::GetAncestor(reinterpret_cast<HWND>(page.viewWidget()), GA_ROOT);
-}
-
-void AutomationSessionClient::requestMaximizeWindowOfPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy& page, CompletionHandler<void()>&& completionHandler)
-{
-    ::ShowWindow(GetRootWindowHandle(page), SW_MAXIMIZE);
-    completionHandler();
-}
-
-void AutomationSessionClient::requestHideWindowOfPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy& page, CompletionHandler<void()>&& completionHandler)
-{
-    ::ShowWindow(GetRootWindowHandle(page), SW_MINIMIZE);
-    completionHandler();
-}
-
-void AutomationSessionClient::requestRestoreWindowOfPage(WebKit::WebAutomationSession&, WebKit::WebPageProxy& page, CompletionHandler<void()>&& completionHandler)
-{
-    ::ShowWindow(GetRootWindowHandle(page), SW_RESTORE);
-    completionHandler();
-}
-
-void AutomationSessionClient::didDisconnectFromRemote(WebKit::WebAutomationSession& session)
-{
-    session.setClient(nullptr);
-
-    RunLoop::protectedMain()->dispatch([&session] {
-        auto processPool = session.protectedProcessPool();
-        if (processPool) {
-            processPool->setAutomationSession(nullptr);
-            processPool->setPagesControlledByAutomation(false);
-        }
-    });
-}
-
-// AutomationClient
 AutomationClient::AutomationClient(WebProcessPool& processPool)
     : m_processPool(processPool)
 {
